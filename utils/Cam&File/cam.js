@@ -1,4 +1,3 @@
-// CameraScreen.js
 import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
@@ -18,9 +17,23 @@ export default function Camera() {
   const [recognizedText, setRecognizedText] = useState([]);
   const [imageUri, setImageUri] = useState(null);
   const [flashMode, setFlashMode] = useState(RNCamera.Constants.FlashMode.off);
+  const [cameraReady, setCameraReady] = useState(false);
+  const [modelReady, setModelReady] = useState(false);
 
+  // Load ML model safely with slight delay
   useEffect(() => {
-    loadModel().then(() => console.log('Model loaded')).catch(e => console.error("Failed to load model:", e));
+    const timer = setTimeout(() => {
+      loadModel()
+        .then(() => {
+          console.log('[CameraScreen] Model loaded successfully');
+          setModelReady(true);
+        })
+        .catch(e => {
+          console.error('[CameraScreen] Failed to load model:', e);
+        });
+    }, 300); // slight delay to ensure bridge is ready
+
+    return () => clearTimeout(timer);
   }, []);
 
   const toggleFlash = () => {
@@ -32,17 +45,35 @@ export default function Camera() {
   };
 
   const captureAndDetect = async () => {
-    if (cameraRef.current) {
-      const options = { quality: 0.8, base64: false, doNotSave: true };
-      try {
-        const data = await cameraRef.current.takePictureAsync(options);
-        setImageUri(data.uri);
+    if (!cameraReady) {
+      console.warn('[CameraScreen] Camera not ready yet.');
+      return;
+    }
 
-        const results = await detectText(data.uri);
-        setRecognizedText(results || []);
-      } catch (error) {
-        console.error("Failed to take picture or detect text:", error);
+    if (!modelReady) {
+      console.warn('[CameraScreen] Model not loaded yet.');
+      return;
+    }
+
+    if (!cameraRef.current) {
+      console.warn('[CameraScreen] Camera reference not available.');
+      return;
+    }
+
+    try {
+      const options = { quality: 0.8, base64: false, doNotSave: true };
+      const data = await cameraRef.current.takePictureAsync(options);
+      
+      if (!data || !data.uri) {
+        throw new Error('No image URI returned');
       }
+
+      setImageUri(data.uri);
+
+      const results = await detectText(data.uri);
+      setRecognizedText(results || []);
+    } catch (error) {
+      console.error('[CameraScreen] Failed to take picture or detect text:', error);
     }
   };
 
@@ -52,8 +83,8 @@ export default function Camera() {
   };
 
   const usePicture = () => {
-    console.log("Image used:", imageUri);
-    console.log("Detected text:", recognizedText);
+    console.log('[CameraScreen] Image used:', imageUri);
+    console.log('[CameraScreen] Detected text:', recognizedText);
   };
 
   return (
@@ -62,7 +93,9 @@ export default function Camera() {
         <>
           <View style={styles.topBar}>
             <TouchableOpacity onPress={toggleFlash} style={styles.topBarButton}>
-              <Text style={{ color: '#fff' }}>{flashMode === RNCamera.Constants.FlashMode.off ? 'Flash Off' : 'Flash On'}</Text>
+              <Text style={{ color: '#fff' }}>
+                {flashMode === RNCamera.Constants.FlashMode.off ? 'Flash Off' : 'Flash On'}
+              </Text>
             </TouchableOpacity>
           </View>
 
@@ -71,6 +104,10 @@ export default function Camera() {
             style={styles.camera}
             captureAudio={false}
             flashMode={flashMode}
+            onCameraReady={() => {
+              console.log('[CameraScreen] Camera is ready');
+              setCameraReady(true);
+            }}
           />
 
           <View style={styles.bottomBar}>
@@ -89,9 +126,13 @@ export default function Camera() {
 
           {/* Display text results */}
           <View style={styles.textOverlay}>
-            {recognizedText.map((line, index) => (
-              <Text key={index} style={styles.textLine}>{line}</Text>
-            ))}
+            {recognizedText.length === 0 ? (
+              <Text style={styles.textLine}>No text found.</Text>
+            ) : (
+              recognizedText.map((line, index) => (
+                <Text key={index} style={styles.textLine}>{line}</Text>
+              ))
+            )}
           </View>
 
           <View style={styles.previewBottomBar}>
