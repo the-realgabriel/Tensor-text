@@ -16,7 +16,6 @@ export default function Camera() {
   const cameraRef = useRef(null);
   const [recognizedText, setRecognizedText] = useState([]);
   const [imageUri, setImageUri] = useState(null);
-  const [flashMode, setFlashMode] = useState(RNCamera.Constants.FlashMode.off);
   const [cameraReady, setCameraReady] = useState(false);
   const [modelReady, setModelReady] = useState(false);
 
@@ -36,13 +35,7 @@ export default function Camera() {
     return () => clearTimeout(timer);
   }, []);
 
-  const toggleFlash = () => {
-    setFlashMode(
-      flashMode === RNCamera.Constants.FlashMode.off
-        ? RNCamera.Constants.FlashMode.on
-        : RNCamera.Constants.FlashMode.off
-    );
-  };
+
 
   const captureAndDetect = async () => {
     if (!cameraReady) {
@@ -92,10 +85,14 @@ export default function Camera() {
       {!imageUri ? (
         <>
           <View style={styles.topBar}>
-            <TouchableOpacity onPress={toggleFlash} style={styles.topBarButton}>
-              <Text style={{ color: '#fff' }}>
-                {flashMode === RNCamera.Constants.FlashMode.off ? 'Flash Off' : 'Flash On'}
-              </Text>
+            <TouchableOpacity
+              style={styles.topBarButton}
+              onPress={() => {
+                console.log('[CameraScreen] Back button pressed');
+                // Handle back navigation here
+              }}
+            >
+              <Text style={{ color: 'white' }}>Back</Text>
             </TouchableOpacity>
           </View>
 

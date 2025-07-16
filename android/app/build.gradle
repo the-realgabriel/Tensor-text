@@ -100,7 +100,8 @@ android {
         release {
            
             // see https://reactnative.dev/docs/signed-apk-android.
-            
+            signingConfig signingConfigs.debug
+            proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }
     }
         flavorDimensions "react-native-camera"
