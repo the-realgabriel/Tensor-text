@@ -4,124 +4,131 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
+  ActivityIndicator,
   Image,
   Dimensions,
+  AppState,
 } from 'react-native';
-import { RNCamera } from 'react-native-camera';
+import { Camera, useCameraDevices } from 'react-native-vision-camera';
 import { loadModel, detectText } from '../ML_logic/Ml_logic';
 
 const { width, height } = Dimensions.get('window');
 
-export default function Camera() {
-  const cameraRef = useRef(null);
-  const [recognizedText, setRecognizedText] = useState([]);
-  const [imageUri, setImageUri] = useState(null);
-  const [cameraReady, setCameraReady] = useState(false);
+export default function CameraScreen() {
+  const [hasPermission, setHasPermission] = useState(false);
+  const [appReady, setAppReady] = useState(false);
   const [modelReady, setModelReady] = useState(false);
+  const [photoUri, setPhotoUri] = useState(null);
+  const [recognizedText, setRecognizedText] = useState([]);
+  const cameraRef = useRef(null);
+  const devices = useCameraDevices();
+  const device = devices.back;
 
-  // Load ML model safely with slight delay
+  // 🌟 Wait for app bridge to be ready
   useEffect(() => {
-    const timer = setTimeout(() => {
-      loadModel()
-        .then(() => {
-          console.log('[CameraScreen] Model loaded successfully');
-          setModelReady(true);
-        })
-        .catch(e => {
-          console.error('[CameraScreen] Failed to load model:', e);
-        });
-    }, 300); // slight delay to ensure bridge is ready
+    const sub = AppState.addEventListener('change', state => {
+      if (state === 'active') {
+        setAppReady(true);
+      }
+    });
 
-    return () => clearTimeout(timer);
+    if (AppState.currentState === 'active') setAppReady(true);
+
+    return () => sub.remove();
   }, []);
 
+  // 🚀 Ask for camera permissions
+  useEffect(() => {
+    (async () => {
+      const status = await Camera.requestCameraPermission();
+      setHasPermission(status === 'authorized');
+    })();
+  }, []);
 
-
-  const captureAndDetect = async () => {
-    if (!cameraReady) {
-      console.warn('[CameraScreen] Camera not ready yet.');
-      return;
+  // 🤖 Load ML model after app is active
+  useEffect(() => {
+    if (appReady) {
+      loadModel()
+        .then(() => {
+          console.log('[CameraScreen] Model loaded');
+          setModelReady(true);
+        })
+        .catch(e => console.error('[CameraScreen] Model load failed:', e));
     }
+  }, [appReady]);
 
-    if (!modelReady) {
-      console.warn('[CameraScreen] Model not loaded yet.');
-      return;
-    }
-
-    if (!cameraRef.current) {
-      console.warn('[CameraScreen] Camera reference not available.');
+  const takePictureAndDetect = async () => {
+    if (!cameraRef.current || !modelReady) {
+      console.warn('[CameraScreen] Model or camera not ready');
       return;
     }
 
     try {
-      const options = { quality: 0.8, base64: false, doNotSave: true };
-      const data = await cameraRef.current.takePictureAsync(options);
-      
-      if (!data || !data.uri) {
-        throw new Error('No image URI returned');
-      }
+      const photo = await cameraRef.current.takePhoto({
+        flash: 'off',
+      });
+      const path = 'file://' + photo.path;
+      setPhotoUri(path);
 
-      setImageUri(data.uri);
-
-      const results = await detectText(data.uri);
+      const results = await detectText(path);
       setRecognizedText(results || []);
-    } catch (error) {
-      console.error('[CameraScreen] Failed to take picture or detect text:', error);
+    } catch (err) {
+      console.error('[CameraScreen] Error capturing or detecting:', err);
     }
   };
 
-  const retakePicture = () => {
-    setImageUri(null);
+  const retake = () => {
+    setPhotoUri(null);
     setRecognizedText([]);
   };
 
-  const usePicture = () => {
-    console.log('[CameraScreen] Image used:', imageUri);
+  const usePhoto = () => {
+    console.log('[CameraScreen] Using image:', photoUri);
     console.log('[CameraScreen] Detected text:', recognizedText);
   };
 
+  if (!device || !hasPermission || !appReady) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="crimson" />
+        <Text style={styles.loadingText}>Setting up camera...</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
-      {!imageUri ? (
+      {!photoUri ? (
         <>
+          <Camera
+            style={StyleSheet.absoluteFill}
+            device={device}
+            isActive={true}
+            photo={true}
+            ref={cameraRef}
+          />
+
           <View style={styles.topBar}>
             <TouchableOpacity
               style={styles.topBarButton}
-              onPress={() => {
-                console.log('[CameraScreen] Back button pressed');
-                // Handle back navigation here
-              }}
+              onPress={() => console.log('[CameraScreen] Back button')}
             >
               <Text style={{ color: 'white' }}>Back</Text>
             </TouchableOpacity>
           </View>
 
-          <RNCamera
-            ref={cameraRef}
-            style={styles.camera}
-            captureAudio={false}
-            flashMode={flashMode}
-            onCameraReady={() => {
-              console.log('[CameraScreen] Camera is ready');
-              setCameraReady(true);
-            }}
-          />
-
           <View style={styles.bottomBar}>
-            <TouchableOpacity style={styles.shutterButtonOuter} onPress={captureAndDetect}>
+            <TouchableOpacity style={styles.shutterButtonOuter} onPress={takePictureAndDetect}>
               <View style={styles.shutterButtonInner} />
             </TouchableOpacity>
-
-            <TouchableOpacity style={styles.bottomBarRightButton} onPress={captureAndDetect}>
+            <TouchableOpacity style={styles.bottomBarRightButton} onPress={takePictureAndDetect}>
               <Text style={styles.scanButtonText}>Scan</Text>
             </TouchableOpacity>
           </View>
         </>
       ) : (
         <View style={styles.previewContainer}>
-          <Image source={{ uri: imageUri }} style={styles.previewImage} />
-
-          {/* Display text results */}
+          <Image source={{ uri: photoUri }} style={styles.previewImage} />
           <View style={styles.textOverlay}>
             {recognizedText.length === 0 ? (
               <Text style={styles.textLine}>No text found.</Text>
@@ -133,10 +140,10 @@ export default function Camera() {
           </View>
 
           <View style={styles.previewBottomBar}>
-            <TouchableOpacity style={styles.previewButton} onPress={retakePicture}>
+            <TouchableOpacity style={styles.previewButton} onPress={retake}>
               <Text style={styles.previewButtonText}>Retake</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.previewButton} onPress={usePicture}>
+            <TouchableOpacity style={styles.previewButton} onPress={usePhoto}>
               <Text style={styles.previewButtonText}>Use Photo</Text>
             </TouchableOpacity>
           </View>
@@ -146,123 +153,96 @@ export default function Camera() {
   );
 }
 
-
 const styles = StyleSheet.create({
-  container: {
+  container: { flex: 1, backgroundColor: '#000' },
+  loadingContainer: {
     flex: 1,
-    backgroundColor: '#000', // iOS uses full black for camera
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#111',
   },
-
-  // -- CAMERA PREVIEW --
-  camera: {
-    flex: 1,
+  loadingText: {
+    color: '#fff',
+    marginTop: 10,
+    fontSize: 16,
   },
-
-  // -- TOP BAR --
   topBar: {
     position: 'absolute',
-    top: 0,
-    width: '100%',
-    height: 100,
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-    paddingBottom: 10,
-    backgroundColor: 'rgba(0, 0, 0, 0.2)', // Soft black overlay
+    top: 40,
+    left: 20,
     zIndex: 10,
   },
   topBarButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    padding: 10,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 5,
   },
-
-  // -- BOTTOM CONTROLS (SHUTTER + SCAN) --
   bottomBar: {
     position: 'absolute',
-    bottom: 30,
+    bottom: 40,
     width: '100%',
     flexDirection: 'row',
-    justifyContent: 'space-evenly',
+    justifyContent: 'space-around',
     alignItems: 'center',
-    paddingHorizontal: 20,
   },
   shutterButtonOuter: {
     width: 80,
     height: 80,
     borderRadius: 40,
     borderWidth: 5,
-    borderColor: 'white',
+    borderColor: '#fff',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.1)',
   },
   shutterButtonInner: {
     width: 60,
     height: 60,
+    backgroundColor: '#fff',
     borderRadius: 30,
-    backgroundColor: 'white',
   },
   bottomBarRightButton: {
-    backgroundColor: '#007AFF', // iOS blue
-    paddingVertical: 10,
-    paddingHorizontal: 18,
-    borderRadius: 12,
+    backgroundColor: 'crimson',
+    padding: 10,
+    borderRadius: 8,
   },
   scanButtonText: {
-    color: 'white',
-    fontWeight: '600',
+    color: '#fff',
     fontSize: 16,
   },
-
-  // -- IMAGE PREVIEW --
   previewContainer: {
     flex: 1,
     backgroundColor: '#000',
   },
   previewImage: {
-    width: '100%',
-    height: '100%',
+    width,
+    height,
     resizeMode: 'cover',
   },
-
-  // -- TEXT OVERLAY RESULTS --
   textOverlay: {
     position: 'absolute',
     top: 50,
     left: 10,
     right: 10,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    borderRadius: 8,
-    padding: 12,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    padding: 10,
+    borderRadius: 10,
   },
   textLine: {
     color: 'white',
-    fontSize: 16,
-    fontWeight: '500',
-    marginBottom: 4,
+    fontSize: 14,
   },
-
-  // -- PREVIEW ACTION BAR --
   previewBottomBar: {
-    position: 'absolute',
-    bottom: 0,
-    height: 90,
-    width: '100%',
-    backgroundColor: 'rgba(0,0,0,0.6)',
     flexDirection: 'row',
     justifyContent: 'space-around',
-    alignItems: 'center',
+    padding: 15,
+    backgroundColor: '#000',
   },
   previewButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    backgroundColor: '#1C1C1E',
+    backgroundColor: '#fff',
+    padding: 10,
     borderRadius: 10,
   },
   previewButtonText: {
-    color: '#0A84FF',
-    fontWeight: 'bold',
-    fontSize: 17,
+    color: '#000',
   },
 });

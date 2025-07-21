@@ -109,6 +109,9 @@ android {
         mlkit {
             dimension "react-native-camera"
         }
+        general{
+            dimension "react-native-camera"
+        }
     }
 }
 
