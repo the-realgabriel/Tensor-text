@@ -1,6 +1,6 @@
 
 import Camera from './utils/Cam&File/cam';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 
 export default function App() {
   return (
@@ -16,7 +16,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center', // vertical centering
     alignItems: 'center',     // horizontal centering
-    backgroundColor: 'white', // fixed color
+    backgroundColor: 'black', // fixed color
   },
 
   camContainer: {
