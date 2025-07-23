@@ -5,16 +5,14 @@ import TextRecognition from 'react-native-text-recognition';
 
 const tflite = new Tflite();
 
-/**
- * Load the TFLite model
- */
+
 export const loadModel = () => {
   return new Promise((resolve, reject) => {
     try {
       tflite.loadModel(
         {
           model: 'models/best_float16.tflite',
-          numThreads: 1,
+          numThreads: 2,
         },
         (err, res) => {
           if (err) {
@@ -35,7 +33,7 @@ export const loadModel = () => {
 
 /**
  * Run YOLO object detection on an image (currently unused)
- * @param {string} imagePath - URI of image (e.g., from RNCamera)
+ * @param {string} imagePath 
  */
 export const detectObjectsWithTFLite = (imagePath) => {
   return new Promise((resolve, reject) => {
